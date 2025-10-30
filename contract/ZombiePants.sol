@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -7,14 +6,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /// @title Zombie Pants NFT – Undead trousers on Base
-/// @notice FCFS 10,000 supply, 1 per wallet, $0.5 mint, admin free
 contract ZombiePants is ERC721Burnable, Ownable, ReentrancyGuard {
     uint256 public nextId = 1;
     uint256 public constant MAX_SUPPLY = 10000;
-    uint256 public mintPriceWei;      // ≈ $0.5
-    address public payout;            // admin wallet (free mint)
+    uint256 public mintPriceWei;       // ≈ $0.5
+    address public payoutAddress;      // admin wallet (free mint)
     bool public mintOpen = true;
-
     mapping(address => bool) public minted;
     string public metadataServer;
 
@@ -24,14 +21,14 @@ contract ZombiePants is ERC721Burnable, Ownable, ReentrancyGuard {
         ERC721("Zombie Pants", "ZPANTS")
     {
         mintPriceWei = _mintPriceWei;
-        payout = _payout;
+        payoutAddress = _payout;
         metadataServer = _meta;
     }
 
-    // --- Admin ---
+    // --- Admin controls ---
     function setMintOpen(bool v) external onlyOwner { mintOpen = v; }
     function setMintPrice(uint256 v) external onlyOwner { mintPriceWei = v; }
-    function setPayout(address a) external onlyOwner { payout = a; }
+    function setPayout(address a) external onlyOwner { payoutAddress = a; }
     function setMetadataServer(string calldata url) external onlyOwner { metadataServer = url; }
 
     // --- Mint ---
@@ -40,26 +37,26 @@ contract ZombiePants is ERC721Burnable, Ownable, ReentrancyGuard {
         require(nextId <= MAX_SUPPLY, "Sold out");
         require(!minted[to], "Already minted");
 
-        // Admin wallet mint gratis
-        if (msg.sender != payout) {
+        if (msg.sender != payoutAddress) {
             require(msg.value >= mintPriceWei, "Insufficient fee");
         }
 
         minted[to] = true;
         tokenId = nextId++;
         _safeMint(to, tokenId);
-        _payout();
+
+        _payoutFunds();
         emit Minted(to, tokenId);
     }
 
-    function _payout() internal {
-        if (payout != address(0) && address(this).balance > 0) {
-            (bool ok, ) = payable(payout).call{value: address(this).balance}("");
+    function _payoutFunds() internal {
+        if (payoutAddress != address(0) && address(this).balance > 0) {
+            (bool ok, ) = payable(payoutAddress).call{value: address(this).balance}("");
             require(ok, "Payout failed");
         }
     }
 
-    // --- Metadata (OpenSea standard) ---
+    // --- Metadata (OpenSea format) ---
     function tokenURI(uint256 id) public view override returns (string memory) {
         require(_exists(id), "Not exist");
         return string(abi.encodePacked(metadataServer, _toString(id)));
@@ -70,8 +67,7 @@ contract ZombiePants is ERC721Burnable, Ownable, ReentrancyGuard {
         uint256 j = v; uint256 len;
         while (j != 0) { len++; j /= 10; }
         bytes memory b = new bytes(len);
-        uint256 k = len;
-        j = v;
+        uint256 k = len; j = v;
         while (j != 0) { b[--k] = bytes1(uint8(48 + j % 10)); j /= 10; }
         return string(b);
     }
